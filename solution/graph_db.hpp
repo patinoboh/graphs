@@ -6,6 +6,8 @@
 #include <tuple>
 
 
+// - - - - - E D G E _ D E C L A R A T I O N - - - - -
+
 
 class edge {
 public:
@@ -27,6 +29,8 @@ public:
     auto dst() const;
 };
 
+
+// - - - - - V E R T E X _ D E C L A R A T I O N - - - - -
 
 
 class vertex {
@@ -50,8 +54,34 @@ public:
 };
 
 
+// - - - - - G R A P H _ D E C L A R A T I O N - - - - -
 
+// struct graph_schema {
+//     using vertex_user_id_t =  // user identifier for vertices
+//     using vertex_property_t = // types of vertex properties
+
+//     using edge_user_id_t = // user identifier for edges
+//     using edge_property_t = // types of edge properties
+// };
+
+
+template< typename T, template< typename> typename F>
+struct my_type_transform;
+
+template< typename ... L, template< typename P> class F>
+struct my_type_transform< std::tuple< L ...>, F>
+{
+    using type = std::tuple< F< L> ...>;
+};
+
+template< typename T, template< typename> typename F>
+using my_type_transform_t = typename my_type_transform< T, F>;
+
+
+template<class GraphSchema>
 class graph_db {
+    using vertices_columnar_t = type_transform_t<typename GraphSchema::vertex_property_t, std::vector>
+    using edges_columnar_t = type_transform_t<typename GraphSchema::edge_property_t, std::vector>
 public:
     using vertex_t = 
 
@@ -84,10 +114,6 @@ public:
     template<typename ...Props>
     edge_t add_edge(const typename GraphSchema::edge_user_id_t &euid, const vertex_t &v1, const vertex_t &v2, Props &&...props);
 
-    /**
-     * @brief Returns begin() and end() iterators to all edges in the database.
-     * @return A ranges::subrange(begin(), end()) of edge iterators.
-     */
     std::ranges::subrange<edge_it_t> get_edges() const;
 };
 
