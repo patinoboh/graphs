@@ -8,7 +8,7 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
-
+#include "isValidGraphSchema.hpp"
 
 // - - - - - E D G E _ D E C L A R A T I O N - - - - -
 
@@ -25,27 +25,38 @@ private:
     idx_type idx;
     idx_type from_idx;
     idx_type to_idx;
-    graph_db<GraphSchema> *db;
+    graph_db<GraphSchema> &db;
 public:
     using edge_id_t = typename GraphSchema::edge_user_id_t;
     using edge_property_t = typename GraphSchema::edge_property_t;
 
-    // edge_id_t id() const{return }
+    edge(graph_db<GraphSchema>& db, idx_type idx, idx_type from, idx_type to) : db(db), idx(idx), from_idx(from), to_idx(to) {};
 
+    edge_id_t id() const{return db.edge_ids[idx];}
+
+
+    template<size_t I>
+    decltype(auto) get_property() const{
+        return std::get<I>(db.edge_props)[idx];
+    }
+    
     // auto get_properties() const;
-
-    // template<size_t I>
-    // decltype(auto) get_property() const;
 
     // template<typename ...PropsType>
     // void set_properties(PropsType &&...props);
 
-    // template<size_t I, typename PropType>
-    // void set_property(const PropType &prop);
+    template<size_t I, typename PropType>
+    void set_property(const PropType &prop){
+        std::get<I>(db.edge_props)[idx] = prop;
+    }
 
-    // auto src() const;
+    auto src() const{
+        return vertex<GraphSchema>(db, from_idx);
+    }
 
-    // auto dst() const;
+    auto dst() const{
+        return vertex<GraphSchema>(db, to_idx);
+    }
 };
 
 
@@ -61,45 +72,39 @@ public:
     using vertex_id_t = typename GraphSchema::vertex_user_id_t;
     using vertex_property_t = typename GraphSchema::vertex_property_t;
 
-    vertex_id_t vuid;
-    
-    // vertex(const graph_db<GraphSchema>& db, idx_type idx) : db(db), idx(idx) {};
-    // vertex(const graph_db<GraphSchema>& db, idx_type&& idx) : db(db), idx(std::move(idx)) {};
-
     vertex(graph_db<GraphSchema>& db, idx_type idx) : db(db), idx(idx) {};
     vertex(graph_db<GraphSchema>& db) : db(db) {};
 
-    void printIdx(){
-        std::cout << idx << std::endl;
-    }
+    auto id() const{return db.vertex_ids[idx];}
+
+    void printIdx(){std::cout << idx << std::endl;}
     
     void test(){
-        // db.test();
         std::cout << "test z vertexu" << std::endl;
         db.test();
     }
 
+    // auto get_properties() const{ // TODO
+    // }
 
-    // vertex(graph_db<GraphSchema> *db, size_t idx) : db(db), idx(idx) {}
-    // vertex_idx_t id() const{return vuid;}
+    template<size_t I>
+    decltype(auto) get_property() const{
+        return std::get<I>(db.vertex_props)[idx];
+    }
 
-    // auto get_properties() const;
-
-    // template<size_t I>
-    // decltype(auto) get_property() const;
-
-    // template<typename ...PropsType>
-    // void set_properties(PropsType &&...props);
-
-    // template<size_t I, typename PropType>
-    // void set_property(const PropType &prop);
-
+    template<typename ...PropsType>
+    void set_properties(PropsType &&...props){ // TODO
+    }
+    
+    template<size_t I, typename PropType>
+    void set_property(const PropType &prop) const {
+        std::get<I>(db.vertex_props)[idx] = prop;
+    }
+    
     // using neighbor_it_t =
 
     // std::ranges::subrange<neighbor_it_t> edges() const;
 };
-
-
 
 
 template< typename T, template< typename> typename F> // TODO : co ked dam prec typename?
@@ -136,36 +141,8 @@ void print_vectors_in_tuple(std::tuple<Ts...>& tuple) {
 }
 
 
-
-
-// // - - - - - S E T - - - - -
-// DOES NOT WORK ANYMORE
-
-// template<typename Tuple, typename T, std::size_t... I>
-// void set_property(Tuple&& tuple, const T& value, size_t idx, std::index_sequence<I...>) {
-//     ((I == idx ? std::get<I>(tuple).push_back(value) : void()), ...);
-// }
-
-// template<typename... Ts, typename T>
-// void set_property(std::tuple<Ts...>& tuple, const T& value, size_t index) {
-//     set_property(tuple, value, index, std::make_index_sequence<sizeof...(Ts)>());
-// }
-
-
-
-// auto properties = std::make_tuple(2, 2.2, true, "dva");
-//     std::apply([&gdb](auto&&... args) {
-//         gdb.add_vertex("v2", std::forward<decltype(args)>(args)...);
-//     }, properties);
-// print_vectors_in_tuple(gdb.vertices);
-
-
 // - - - - - G R A P H _ D E C L A R A T I O N - - - - -
 
-
-
-
-// using vertex_property_t = std::tuple<std::string, int, double, char>;
 
 template<class GraphSchema>
 class graph_db {
@@ -178,8 +155,6 @@ class graph_db {
 private:
     
     size_t vertices_count = 0;
-    vertices_columnar_t vertex_props;
-    edges_columnar_t edge_props;
     std::vector<vertex_id_t> vertex_ids;
     std::vector<edge_id_t> edge_ids;
     
@@ -190,13 +165,18 @@ private:
     void add_to_columns_impl(std::index_sequence<Is...>, Props&&... props) {
         (std::get<Is>(vertex_props).push_back(std::forward<Props>(props)), ...);
     }
+public:
+    edges_columnar_t edge_props;
+    vertices_columnar_t vertex_props;
+
 
     template<typename... Props>
     void add_vertex_properties(Props&&... props) {
         add_to_columns_impl(std::index_sequence_for<Props...>{}, std::forward<Props>(props)...);
     }
 
-public:
+
+
     graph_db() = default;
 
     void test(){
@@ -221,7 +201,6 @@ public:
         return vertex_t(*this, vertices_count++);
     }
 
-
     template<typename ...Props>
     vertex_t add_vertex(typename GraphSchema::vertex_user_id_t &&vuid, Props &&...props){        
         static_assert(sizeof...(Props) == std::tuple_size<typename GraphSchema::vertex_property_t>::value,
@@ -244,16 +223,23 @@ public:
 
     // std::ranges::subrange<vertex_it_t> get_vertexes() const;
 
-    // edge_t add_edge(typename GraphSchema::edge_user_id_t &&euid, const vertex_t &v1, const vertex_t &v2){
-    //     if(!inRange(v1) || !inRange(v2)){
-    //         throw std::out_of_range("vertex out of range");
-    //     }
-    //     edges[v1.idx].insert(v2.idx);
+    edge_t add_edge(typename GraphSchema::edge_user_id_t &&euid, const vertex_t &v1, const vertex_t &v2){
+        if(!inRange(v1.idx) || !inRange(v2.idx)){
+            throw std::out_of_range("vertex out of range");
+        }
+        edges[v1.idx].insert(v2.idx);
 
-    //     return edge_t(); // TODO
-    // }
+        return edge_t(*this, std::move(euid), v1.idx, v2.idx);
+    }
     
-    // edge_t add_edge(const typename GraphSchema::edge_user_id_t &euid, const vertex_t &v1, const vertex_t &v2);
+    edge_t add_edge(const typename GraphSchema::edge_user_id_t &euid, const vertex_t &v1, const vertex_t &v2){
+        if(!inRange(v1.idx) || !inRange(v2.idx)){
+            throw std::out_of_range("vertex out of range");
+        }
+        edges[v1.idx].insert(v2.idx);
+
+        return edge_t(*this, euid, v1.idx, v2.idx);
+    }
 
     // template<typename ...Props>
     // edge_t add_edge(typename GraphSchema::edge_user_id_t &&euid, const vertex_t &v1, const vertex_t &v2, Props &&...props);
