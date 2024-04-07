@@ -8,15 +8,17 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
+#include "vertexIterator.hpp"
 #include "isValidGraphSchema.hpp"
-
-// - - - - - E D G E _ D E C L A R A T I O N - - - - -
 
 
 using idx_type = size_t;
 
 template<class GraphSchema>
 class graph_db;
+
+
+// - - - - - E D G E _ D E C L A R A T I O N - - - - -
 
 
 template<class GraphSchema>
@@ -35,23 +37,29 @@ public:
     edge_id_t id() const {return db.edge_ids[idx];}
 
     void printAll(){db.printEdges();}    
-    
-    void print(){
-        db.test();
-    }
 
     template<size_t I>
     decltype(auto) get_property() const{
         return std::get<I>(db.edge_props)[idx];
     }
     
-    // auto get_properties() const;
+    auto get_properties() const{
+        return db.get_edge_properties(idx, std::make_index_sequence<std::tuple_size<edge_property_t>::value>{});
+    }
 
-    // template<typename ...PropsType>
-    // void set_properties(PropsType &&...props);
+    template<size_t... Is, typename... PropTypes>
+    void set_properties(std::index_sequence<Is...>, PropTypes&&... props) const {
+        ((set_property<Is>(std::forward<PropTypes>(props))), ...);
+    }
+
+    template<typename ...PropsType>
+    void set_properties(PropsType &&...props) const { // TODO
+        set_properties(std::index_sequence_for<PropsType...>{}, std::forward<PropsType>(props)...);
+    }
+
 
     template<size_t I, typename PropType>
-    void set_property(const PropType &prop){
+    void set_property(const PropType &prop) const {
         std::get<I>(db.edge_props)[idx] = prop;
     }
 
@@ -84,15 +92,21 @@ public:
 
     void printIdx(){std::cout << idx << std::endl;}
     void printAll(){db.printVertices();}
-    
+        
+   
+    auto get_properties() const{
+        return db.get_vertex_properties(idx, std::make_index_sequence<std::tuple_size<vertex_property_t>::value>{});
+    }
 
-    // auto get_properties() const{ // TODO
-    // }
+    template<size_t... Is, typename... PropTypes>
+    void set_properties(std::index_sequence<Is...>, PropTypes&&... props) const {
+        ((set_property<Is>(std::forward<PropTypes>(props))), ...);
+    }
 
-
-    // template<typename ...PropsType>
-    // void set_properties(PropsType &&...props) const { // TODO
-    // }
+    template<typename ...PropsType>
+    void set_properties(PropsType &&...props) const {
+        set_properties(std::index_sequence_for<PropsType...>{}, std::forward<PropsType>(props)...);
+    }    
 
     // using neighbor_it_t =
 
@@ -110,7 +124,7 @@ public:
 };
 
 
-template< typename T, template< typename> typename F> // TODO : co ked dam prec typename?
+template< typename T, template< typename> typename F>
 struct my_type_transform;
 
 template< typename ... L, template< typename P> class F>
@@ -142,6 +156,41 @@ template<typename... Ts>
 void print_vectors_in_tuple(std::tuple<Ts...>& tuple) {
     print_vectors_in_tuple(tuple, std::make_index_sequence<sizeof...(Ts)>());
 }
+
+
+// - - - - - I T E R A T O R _ D E C L A R A T I O N - - - - -
+
+template<class GraphSchema>
+class VertexIterator{
+private:
+    graph_db<GraphSchema> &db;
+    idx_type idx;
+    idx_type max_index;
+public:
+    VertexIterator(graph_db<GraphSchema> &db, idx_type idx, idx_type max) : db(db), idx(idx), max_index(max) {};
+    vertex<GraphSchema> operator*() const {return vertex<GraphSchema>(db, idx);}
+    VertexIterator& operator++() { ++idx; return *this; }
+    VertexIterator operator++(int) {VertexIterator tmp = *this;++(*this);return tmp;}
+    
+    VertexIterator begin(){
+        return VertexIterator(db, 0, max_index);
+    }
+    VertexIterator end(){
+        return VertexIterator(db, max_index, max_index);
+    }
+
+    bool operator==(const VertexIterator& other) const {return idx == other.idx;}
+    bool operator!=(const VertexIterator& other) const {return idx != other.idx;}
+
+    VertexIterator& operator=(const VertexIterator& other) {
+        idx = other.index;
+        db = other.graph;
+        max_index = other.max_index;
+        return *this;
+    }
+};
+
+
 
 
 // - - - - - G R A P H _ D E C L A R A T I O N - - - - -
@@ -178,7 +227,18 @@ private:
 public:
     edges_columnar_t edge_props;
     vertices_columnar_t vertex_props;
+    
+    graph_db() = default;
+    
+    template<std::size_t... Is>
+    auto get_vertex_properties(idx_type index, std::index_sequence<Is...>) const {
+        return std::make_tuple(std::get<Is>(vertex_props)[index]...);
+    }
 
+    template<std::size_t... Is>
+    auto get_edge_properties(idx_type index, std::index_sequence<Is...>) const {
+        return std::make_tuple(std::get<Is>(edge_props)[index]...);
+    }
 
     template<typename... Props>
     void add_vertex_properties(Props&&... props) {
@@ -189,30 +249,47 @@ public:
     void add_edge_properties(Props&&... props) {
         add_to_columns_impl_edge(std::index_sequence_for<Props...>{}, std::forward<Props>(props)...);
     }
-
+      
     void printVertices(){print_vectors_in_tuple(vertex_props);}
     void printEdges(){print_vectors_in_tuple(edge_props);}
 
-    graph_db() = default;
-
-    // using vertex_it_t =
+    using vertex_it_t = VertexIterator<GraphSchema>;
 
     // using edge_it_t =
 
     // using neighbor_it_t =
 
-    // std::ranges::subrange<vertex_it_t> get_vertexes() const;
+    // std::ranges::subrange<vertex_it_t> get_vertexes() {
+    //     return std::ranges::subrange<vertex_it_t>(vertex_it_t(*this, 0, vertices_count).begin(), vertex_it_t(*this, vertices_count, vertices_count).end());
+    // }
 
-    // std::ranges::subrange<edge_it_t> get_edges() const;
+    vertex_it_t get_iterator(){
+        return vertex_it_t(*this, 0, vertices_count);
+    }
 
+    // std::ranges::subrange<edge_it_t> get_edges() const{
+    //     return std::ranges::subrange<edge_it_t>(VertexIterator(*this, 0, edges_count), VertexIterator(*this, edges_count, edges_count));
+    // }
+
+    template<typename Props>
+    void fill_default_values(Props& props) {
+        std::apply([this](auto&... args) {
+            ([&args] {
+                args.emplace_back();
+            }(), ...);
+        }, props);
+    }
+    
     vertex_t add_vertex(typename GraphSchema::vertex_user_id_t &&vuid){        
-        vertex_ids.push_back(std::move(vuid));
-        return vertex_t(*this, vertices_count++);        
+        vertex_ids.push_back(std::move(vuid));    
+        fill_default_values(vertex_props);
+        return vertex_t(*this, vertices_count++);
     }
     
     vertex_t add_vertex(const typename GraphSchema::vertex_user_id_t &vuid){
         vertex_ids.push_back(vuid);
-        return vertex_t(*this, vertices_count++);
+        fill_default_values(vertex_props);        
+        return vertex_t(*this, vertices_count++);        
     }
 
     template<typename ...Props>
@@ -241,6 +318,7 @@ public:
         }
         edges[v1.idx].insert(v2.idx);
         edge_ids.push_back(std::move(euid));
+        fill_default_values(edge_props);
 
         return edge_t(*this, edges_count++, v1.idx, v2.idx);
     }
@@ -251,6 +329,7 @@ public:
         }
         edges[v1.idx].insert(v2.idx);
         edge_ids.push_back(euid);
+        fill_default_values(edge_props);
 
         return edge_t(*this, edges_count++, v1.idx, v2.idx);
     }
